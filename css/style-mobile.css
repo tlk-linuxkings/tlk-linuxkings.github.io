@@ -1,11 +1,6 @@
-/* ==========================
-   style-mobile.css
-   (media queries i style dla mobilnej wersji)
-   ========================== */
 
-/* Globalny punkt przerwania */
 @media (max-width: 768px) {
-  /* 1. Mobilne menu */
+
   .mobile-nav {
     display: flex;
     align-items: center;
@@ -59,7 +54,7 @@
     left: 0; 
   }
 
-  /* 2. Panel filtrów */
+ 
   .filter-btn {
     position: fixed;
     bottom: 15px;
@@ -99,7 +94,7 @@
     cursor: pointer;
   }
 
-  /* 3. Lista chronologiczna kalendarza */
+
   #mobile-calendar-list {
     padding: 15px;
   }
@@ -119,7 +114,7 @@
     font-size: 14px;
   }
 
-  /* 4. Grid produktów */
+
   .products-grid {
     display: grid;
     grid-template-columns: 1fr;

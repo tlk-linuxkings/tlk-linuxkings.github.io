@@ -67,47 +67,155 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-  // ===== Infinite-loop carousel =====
-  const track = document.getElementById('carouselTrack');
-  const items = window.SLIDER_ITEMS || [];
-  if (track && items.length) {
-    track.innerHTML = '';
-    const originals = items.map(({ id, image, title, price }) => {
-      const link = document.createElement('a');
-      link.href = `product.html?id=${encodeURIComponent(id)}`;
-      link.className = 'card slider-link';
-      link.innerHTML = `
-        <img src="${image}" alt="${title}">
-        <p>${title} – ${price} PLN</p>`;
-      return link;
-    });
-    const clonesBefore = originals.map(n=>n.cloneNode(true));
-    const clonesAfter  = originals.map(n=>n.cloneNode(true));
-    clonesBefore.forEach(n=>track.appendChild(n));
-    originals.forEach(n=>track.appendChild(n));
-    clonesAfter.forEach(n=>track.appendChild(n));
 
-    const slides = Array.from(track.children);
-    const slideWidth = slides[0].offsetWidth + parseInt(getComputedStyle(slides[0]).marginRight);
-    let idx = originals.length;
-    track.style.transform = `translateX(-${idx * slideWidth}px)`;
 
-    function slide() {
-      idx++;
-      track.style.transition = 'transform 0.5s ease';
-      track.style.transform  = `translateX(-${idx * slideWidth}px)`;
-    }
-    track.addEventListener('transitionend', () => {
-      if (idx >= originals.length * 2) {
-        track.style.transition = 'none';
-        idx = originals.length;
-        track.style.transform = `translateX(-${idx * slideWidth}px)`;
-      }
-    });
-    let interval = setInterval(slide, 3000);
-    track.addEventListener('mouseover', ()=>clearInterval(interval));
-    track.addEventListener('mouseout', ()=> interval = setInterval(slide, 3000));
+  
+
+
+
+ // ===== Responsive carousel replacement =====
+(function() {
+  const track = document.getElementById('carouselTrack'); // -> dostosuj id jeśli inne
+  const rawItems = window.SLIDER_ITEMS || []; // twoja lista produktów dla slidera
+  if(!track || !rawItems.length) return;
+
+  // minimalna szerokość pojedynczego kafla (px) — zmień jeśli chcesz mniejsze/kosztowniej
+  const minCardPx = 180;
+
+  // przygotuj elementy (funkcja tworząca pojedynczy element)
+  function makeCard(item) {
+    const a = document.createElement('a');
+    a.className = 'card slider-link';
+    a.href = `product.html?id=${encodeURIComponent(item.id)}`;
+    a.innerHTML = `<img src="${item.image}" alt="${item.title || ''}"><p>${item.title || ''} — ${item.price || ''} PLN</p>`;
+    return a;
   }
+
+  // upewnij się, że lista jest wystarczająco długa (by uniknąć pustych miejsc w ciasnych ustawieniach)
+  let items = rawItems.slice();
+  if(items.length === 0) return;
+
+  // uzupełnij wielokrotności jeśli items < 3 by nie mieć pustych przestrzeni
+  while(items.length < 3) items = items.concat(rawItems);
+
+  // wyczyść track i wstaw elementy (z klonami przed/po)
+  track.innerHTML = '';
+  const originals = items.map(makeCard);
+  // funkcja aby wstawić n razy sekwencję oryginałów (gdy potrzeba)
+  function appendSequence(parent, seq) { seq.forEach(el => parent.appendChild(el.cloneNode(true))); }
+
+  // dodaj klony przed (by był płynny "infinite")
+  appendSequence(track, originals);
+  appendSequence(track, originals);
+  appendSequence(track, originals);
+
+  const slides = Array.from(track.children);
+
+  // styl track (upewnij się, że track ma display:flex i gap w CSS; JS odczyta gap)
+  track.style.display = 'flex';
+  track.style.transition = 'transform 0.5s ease';
+  track.style.willChange = 'transform';
+
+  // odczytaj gap w px (getComputedStyle zwraca np. '16px')
+  function getGapPx() {
+    const gapStr = getComputedStyle(track).gap || '0px';
+    return parseFloat(gapStr) || 0;
+  }
+
+  // oblicz ile widocznych elementów się zmieści, a potem jaki powinna mieć szerokość pojedyncza karta
+  let visible = 4;
+  let stepPx = 0;
+  let slideWidth = 0;
+  let idx = originals.length; // startujemy w "środku" sekwencji
+
+  function computeLayout() {
+  const gapPx = getGapPx();
+  const containerWidth = track.clientWidth;
+
+  // breakpoint-based desired visible:
+  let desired;
+  if (containerWidth < 480) {           // telefon pionowo
+    desired = 1;
+  } else if (containerWidth < 900) {    // tablet / mały desktop
+    desired = 2;
+  } else if (containerWidth < 1300) {   // typowy desktop
+    desired = 4;
+  } else {                              // szerokie monitory - wypełnij przestrzeń
+    // policz ile się zmieści minimalnych kart, lecz ogranicz do max 8
+    const maxPossible = Math.max(1, Math.floor((containerWidth + gapPx) / (minCardPx + gapPx)));
+    desired = Math.min(8, Math.max(4, maxPossible));
+  }
+
+  visible = Math.max(1, Math.min(8, desired));
+  // szerokość pojedynczego slajdu: równo dzielimy przestrzeń dostępna minus gapy
+  slideWidth = Math.floor((containerWidth - gapPx * (visible - 1)) / visible);
+  stepPx = slideWidth + gapPx;
+
+  slides.forEach(s => {
+    s.style.width = slideWidth + 'px';
+    s.style.flex = '0 0 ' + slideWidth + 'px';
+    s.style.boxSizing = 'border-box';
+  });
+
+  idx = originals.length + (idx - originals.length) % originals.length;
+  track.style.transition = 'none';
+  track.style.transform = `translateX(-${idx * stepPx}px)`;
+  setTimeout(()=> track.style.transition = 'transform 0.5s ease', 20);
+}
+
+  computeLayout();
+  window.addEventListener('resize', debounce(()=> {
+    computeLayout();
+  }, 120));
+
+  // helper debounce
+  function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; }
+
+  // auto slide logic
+  let autoplay = true;
+  let interval = null;
+  function startAuto() { if(interval) clearInterval(interval); interval = setInterval(()=> slide(1), 3000); }
+  function stopAuto() { if(interval) clearInterval(interval); interval = null; }
+
+  // slide direction: 1 = forward, -1 = backward
+  function slide(dir=1) {
+    idx += dir;
+    track.style.transition = 'transform 0.45s ease';
+    track.style.transform = `translateX(-${idx * stepPx}px)`;
+  }
+
+  track.addEventListener('transitionend', () => {
+    // jeśli przeskoczyliśmy poza drugi blok oryginałów, wróć bez animacji do środka
+    const blockLen = originals.length;
+    if (idx >= blockLen * 2) {
+      track.style.transition = 'none';
+      idx = blockLen;
+      track.style.transform = `translateX(-${idx * stepPx}px)`;
+    } else if (idx < blockLen) {
+      track.style.transition = 'none';
+      idx = blockLen + (idx % blockLen);
+      track.style.transform = `translateX(-${idx * stepPx}px)`;
+    }
+  });
+
+  track.addEventListener('mouseenter', stopAuto);
+  track.addEventListener('mouseleave', ()=>{ if(autoplay) startAuto(); });
+
+  // start autoplay
+  if(autoplay) startAuto();
+
+})();
+
+
+
+
+
+
+
+
+
+
+
 /*
   // ===== Obsługa przycisku "Kup teraz" =====
   document.querySelectorAll('.btn-buy').forEach(btn =>
